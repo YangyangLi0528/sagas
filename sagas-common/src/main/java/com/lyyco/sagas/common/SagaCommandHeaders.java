@@ -1,4 +1,4 @@
-package com.lyyco.sagas.orchestration;
+package com.lyyco.sagas.common;
 
 import io.eventuate.tram.commands.common.CommandMessageHeaders;
 
