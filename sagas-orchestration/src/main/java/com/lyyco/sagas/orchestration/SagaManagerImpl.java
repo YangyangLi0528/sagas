@@ -1,21 +1,18 @@
 package com.lyyco.sagas.orchestration;
 
+import com.lyyco.sagas.common.LockTarget;
 import com.lyyco.sagas.common.SagaCommandHeaders;
 import com.lyyco.sagas.common.SagaReplyHeaders;
 import com.lyyco.sagas.common.SagaUnlockCommand;
-import io.eventuate.tram.commands.common.CommandReplyOutcome;
-import io.eventuate.tram.commands.common.Failure;
-import io.eventuate.tram.commands.common.ReplyMessageHeaders;
-import io.eventuate.tram.commands.common.Success;
+import io.eventuate.tram.commands.common.*;
 import io.eventuate.tram.commands.producer.CommandProducer;
 import io.eventuate.tram.messaging.common.Message;
 import io.eventuate.tram.messaging.consumer.MessageConsumer;
 import io.eventuate.tram.messaging.producer.MessageBuilder;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+
+import static java.util.Collections.singleton;
 
 public class SagaManagerImpl<Data> implements SagaManager<Data> {
     private Saga<Data> saga;
@@ -66,7 +63,33 @@ public class SagaManagerImpl<Data> implements SagaManager<Data> {
 
     @Override
     public void subscribeToReplyChannel() {
+        messageConsumer.subscribe(saga.getSagaType() + "-consumer", singleton(makeSagaReplyChannel()),
+                this::handleMessage);
+    }
 
+    private void handleMessage(Message message) {
+        if (message.hasHeader(SagaReplyHeaders.REPLY_SAGA_ID)) {
+            handleReply(message);
+        } else {
+
+        }
+    }
+
+    private void handleReply(Message message) {
+        if (!isReplyForThisSagaType(message)) {
+            return;
+        }
+        String sagaId = message.getRequiredHeader(SagaReplyHeaders.REPLY_SAGA_ID);
+        String sagaType = message.getRequiredHeader(SagaReplyHeaders.REPLY_SAGA_TYPE);
+        SagaInstance sagaInstance = sagaInstanceRepository.find(sagaType, sagaId);
+        Data sagaData = SagaDataSerde.deserializeSagaData(sagaInstance.getSerializedSagaData());
+        message.getHeader(SagaReplyHeaders.REPLY_LOCKED).ifPresent(lockedTarget -> {
+            String destination = message.getRequiredHeader(CommandMessageHeaders.inReply(CommandMessageHeaders.DESTINATION));
+            sagaInstance.addDestinationsAndResources(singleton(new DestinationAndResource(destination, lockedTarget)));
+        });
+        String currentState = sagaInstance.getStateName();
+        SagaActions<Data> actions = getStateDefinition().handleReply(currentState, sagaData, message);
+        processActions(sagaId, sagaInstance, sagaData, actions);
     }
 
     @Override
@@ -129,7 +152,7 @@ public class SagaManagerImpl<Data> implements SagaManager<Data> {
 
     @Override
     public SagaInstance create(Data data, Class targetClass, Object targetId) {
-        return null;
+        return create(data, Optional.of(new LockTarget(targetClass, targetId).getTarget()));
     }
 
     private String getSagaType() {
