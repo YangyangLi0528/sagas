@@ -21,7 +21,8 @@ public class SagaManagerFactory {
         this.sagaLockManager = sagaLockManager;
         this.sagaCommandProducer = sagaCommandProducer;
     }
-    public <SagaData> SagaManagerImpl<SagaData> make(Saga<SagaData> saga){
-        return new SagaManagerImpl<>(saga,sagaInstanceRepository,commandProducer,messageConsumer,sagaLockManager,sagaCommandProducer);
+
+    public <SagaData> SagaManagerImpl<SagaData> make(Saga<SagaData> saga) {
+        return new SagaManagerImpl<>(saga, sagaInstanceRepository, commandProducer, messageConsumer, sagaLockManager, sagaCommandProducer);
     }
 }
